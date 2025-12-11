@@ -33,7 +33,7 @@ This project provides MCP servers that enable AI assistants to access comprehens
 ### Prerequisites
 
 1. **Node.js and npm** (for MCP server)
-2. **Python 3.8+** (for setup scripts)
+2. **Python 3.10+** (for setup scripts)
 3. **PostgreSQL** (for database storage)
 4. **Bitwarden CLI** (for API key management)
 
@@ -62,7 +62,22 @@ npm start
 
 ### Detailed Setup
 
-#### 1. Database Setup
+#### 1. Python Environment
+
+```bash
+# Verify Python version (requires 3.10+)
+python --version
+
+# Using uv (recommended)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Or using pip
+python3.10 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+#### 2. Database Setup
 
 ```bash
 # Automated database setup
@@ -80,7 +95,7 @@ sudo -u postgres psql -c "ALTER USER opendiscourse PASSWORD 'opendiscourse123';"
 sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE opendiscourse TO opendiscourse;"
 ```
 
-#### 2. Bitwarden Setup
+#### 3. Bitwarden Setup
 
 ```bash
 # Install Bitwarden CLI
@@ -94,7 +109,7 @@ python3 scripts/test_bitwarden.py
 # - Congress.gov API Key
 ```
 
-#### 3. API Key Configuration
+#### 4. API Key Configuration
 
 ```bash
 # Set environment variables (optional)
@@ -103,6 +118,19 @@ export BITWARDEN_PASSWORD="your-master-password"
 
 # Run automated setup
 python3 scripts/setup_bitwarden.py
+```
+
+#### 5. MCP Server Deployment
+
+```bash
+# Install dependencies
+uv sync
+
+# Start server
+npm start
+
+# Development mode
+npm run dev
 ```
 
 **Bitwarden Item Setup:**

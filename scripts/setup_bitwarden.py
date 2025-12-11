@@ -16,14 +16,8 @@ BITWARDEN_CONFIG = {
     "email": None,  # Will be set via environment or prompt
     "password": None,  # Will be set via environment or prompt
     "items": {
-        "govinfo_api_key": {
-            "name": "GovInfo API Key",
-            "fields": ["api_key", "govinfo", "GovInfo"],
-        },
-        "congress_api_key": {
-            "name": "Congress.gov API Key",
-            "fields": ["api_key", "congress", "Congress.gov", "Congress"],
-        },
+        "govinfo_api_key": {"name": "GovInfo API Key", "field_name": "api_key"},
+        "congress_api_key": {"name": "Congress.gov API Key", "field_name": "api_key"},
     },
 }
 
@@ -79,71 +73,64 @@ def unlock_bitwarden():
         return False
 
 
-def search_api_key(item_name, fields):
+def search_api_key(item_name, field_name):
     """Search for API key in Bitwarden"""
-    for field in fields:
-        try:
-            # Search by item name
-            result = subprocess.run(
-                ["bw", "list", "items", "--search", item_name],
-                capture_output=True,
-                text=True,
-            )
+    try:
+        # Search by item name
+        result = subprocess.run(
+            ["bw", "list", "items", "--search", item_name],
+            capture_output=True,
+            text=True,
+        )
 
-            if result.returncode == 0:
-                items = json.loads(result.stdout)
-                for item in items:
-                    # Check if this is the right item
-                    if item_name.lower() in item.get("name", "").lower():
-                        # Get item details
-                        item_id = item["id"]
-                        detail_result = subprocess.run(
-                            ["bw", "get", "item", item_id],
-                            capture_output=True,
-                            text=True,
-                        )
+        if result.returncode == 0:
+            items = json.loads(result.stdout)
+            for item in items:
+                # Check if this is the right item
+                if item_name.lower() in item.get("name", "").lower():
+                    # Get item details
+                    item_id = item["id"]
+                    detail_result = subprocess.run(
+                        ["bw", "get", "item", item_id], capture_output=True, text=True
+                    )
 
-                        if detail_result.returncode == 0:
-                            item_detail = json.loads(detail_result.stdout)
+                    if detail_result.returncode == 0:
+                        item_detail = json.loads(detail_result.stdout)
 
-                            # Look for API key in fields
-                            for field in item_detail.get("fields", []):
+                        # Look for API key in fields
+                        for field in item_detail.get("fields", []):
+                            if field.get("name", "").lower() == field_name.lower():
+                                return field.get("value", "")
+
+                        # Check notes for API key
+                        notes = item_detail.get("notes", "")
+                        if any(
+                            keyword.lower() in notes.lower()
+                            for keyword in ["api", "key", "token"]
+                        ):
+                            # Try to extract key from notes
+                            lines = notes.split("\n")
+                            for line in lines:
                                 if any(
-                                    keyword.lower() in field.get("name", "").lower()
+                                    keyword in line.lower()
                                     for keyword in ["api", "key", "token"]
                                 ):
-                                    return field.get("value", "")
+                                    # Extract key value
+                                    if ":" in line:
+                                        return line.split(":", 1)[1].strip()
+                                    return line.strip()
 
-                            # Check notes for API key
-                            notes = item_detail.get("notes", "")
-                            if any(
-                                keyword.lower() in notes.lower()
-                                for keyword in ["api", "key", "token"]
-                            ):
-                                # Try to extract key from notes
-                                lines = notes.split("\n")
-                                for line in lines:
-                                    if any(
-                                        keyword in line.lower()
-                                        for keyword in ["api", "key", "token"]
-                                    ):
-                                        # Extract key value
-                                        if ":" in line:
-                                            return line.split(":", 1)[1].strip()
-                                        return line.strip()
-
-                            # Check name field
-                            name = item_detail.get("name", "")
-                            if any(
-                                keyword.lower() in name.lower()
-                                for keyword in ["api", "key", "token"]
-                            ):
-                                return name
-        except json.JSONDecodeError:
-            continue
-        except Exception as e:
-            print(f"Error searching for {item_name}: {e}")
-            continue
+                        # Check name field
+                        name = item_detail.get("name", "")
+                        if any(
+                            keyword.lower() in name.lower()
+                            for keyword in ["api", "key", "token"]
+                        ):
+                            return name
+    except json.JSONDecodeError as e:
+        print(f"Error parsing search results: {e}")
+    except Exception as e:
+        print(f"Error searching for {item_name}: {e}")
 
     return None
 
@@ -160,7 +147,7 @@ def fetch_all_api_keys():
     for key_type, config in BITWARDEN_CONFIG["items"].items():
         print(f"  Searching for {config['name']}...")
 
-        api_key = search_api_key(config["name"], config["fields"])
+        api_key = search_api_key(config["name"], config["field_name"])
 
         if api_key:
             api_keys[key_type] = api_key

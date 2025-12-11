@@ -1,0 +1,8 @@
+# Use uv for Python package management
+[tool.uv]
+dev-dependencies = [
+    "python>=3.10,<3.13"
+]
+
+# Ensure uv uses Python 3.10+
+python-preference = "3.10"

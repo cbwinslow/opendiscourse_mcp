@@ -1,0 +1,13 @@
+# Python version enforcement for OpenDiscourse MCP
+
+# This file ensures Python 3.10+ is used for the project
+
+[tool.rye]
+managed = true
+dev-dependencies = [
+    "python>=3.10,<3.13"
+]
+
+[tool.uv]
+# Ensure uv uses Python 3.10+
+python-preference = "3.10"
