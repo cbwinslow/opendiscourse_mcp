@@ -1,0 +1,16 @@
+You are an expert code reviewer. Analyze the provided code changes (diff below) and give constructive feedback.
+Focus on:
+1. Code quality and best practices
+2. Potential bugs or issues
+3. Readability and maintainability
+
+Codebase context:
+- This is a Python project for MCP servers accessing government data.
+- Main scripts are in the scripts/ directory.
+- Tests are in the tests/ directory.
+- Configuration in config/ and pyproject.toml.
+
+---
+Code Diff:
+{{CODE_DIFF}}
+---
