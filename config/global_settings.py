@@ -186,7 +186,7 @@ class SecurityConfig(BaseModel):
         le=1000
     )
     user_agent: str = Field(
-        default="OpenDiscourse-MCP/1.0",
+        default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
         description="Custom user agent string"
     )
     ssl_verify: bool = Field(

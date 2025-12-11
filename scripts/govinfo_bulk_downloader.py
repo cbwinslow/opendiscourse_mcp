@@ -23,8 +23,9 @@ import concurrent.futures
 import json
 import logging
 from pathlib import Path
-from typing import List, Dict, Set, Optional, Tuple
+from typing import List, Dict, Set, Optional, Tuple, Union
 from urllib.parse import urljoin, urlparse
+from bs4 import BeautifulSoup
 from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -342,55 +343,98 @@ class GovInfoBulkDownloader:
         result.duration = time.time() - start_time
         return result
 
-    def _get_collection_urls(self, collection: str) -> List[str]:
+    def _crawl_collection_recursive(self, start_url: str, collection: str, max_depth: int = 10, current_depth: int = 0) -> List[str]:
         """
-        Get all file URLs for a specific collection
-
+        Recursively crawl govinfo directory structure to find files
+        
         Args:
-            collection: Collection name (e.g., 'BILLS', 'FR', 'CFR')
-
+            start_url: URL to start crawling from
+            collection: Collection name (for filtering)
+            max_depth: Maximum recursion depth
+            current_depth: Current recursion depth
+            
         Returns:
             List of file URLs
         """
-        base_url = urljoin(self.base_url, collection + '/')
         file_urls = []
-
+        
+        if current_depth > max_depth:
+            return file_urls
+            
         try:
-            # Try XML endpoint first
-            xml_url = f"https://www.govinfo.gov/bulkdata/xml/{collection}"
-            response = self.session.get(xml_url, headers={'Accept': 'application/xml'})
+            self.logger.debug(f"Crawling {start_url} (Depth: {current_depth})")
+            response = self.session.get(start_url)
+            
+            if response.status_code != 200:
+                self.logger.warning(f"Failed to access {start_url}: Status {response.status_code}")
+                return file_urls
 
-            if response.status_code == 200:
-                # Parse XML to extract file URLs
+            # Try parsing as custom XML format first (found in govinfo)
+            # Structure: <data><files><file><folder>true/false</folder><link>url</link>...</file>...</files></data>
+            try:
                 from xml.etree import ElementTree
                 root = ElementTree.fromstring(response.content)
-
-                for file_elem in root.findall('.//file'):
-                    file_path = file_elem.text
-                    if file_path:
-                        full_url = urljoin(base_url, file_path)
-                        file_urls.append(full_url)
-
-            else:
-                # Fall back to JSON endpoint
-                json_url = f"https://www.govinfo.gov/bulkdata/json/{collection}"
-                response = self.session.get(json_url, headers={'Accept': 'application/json'})
-
-                if response.status_code == 200:
-                    data = response.json()
-                    if isinstance(data, list):
-                        for item in data:
-                            if isinstance(item, dict) and 'path' in item:
-                                full_url = urljoin(base_url, item['path'])
-                                file_urls.append(full_url)
-                    elif isinstance(data, dict) and 'files' in data:
-                        for file_info in data['files']:
-                            full_url = urljoin(base_url, file_info['path'])
-                            file_urls.append(full_url)
-
+                
+                # Check if it looks like the expected XML
+                if root.tag == 'data' or root.find('.//file') is not None:
+                    for file_elem in root.findall('.//file'):
+                        link = file_elem.find('link').text if file_elem.find('link') is not None else None
+                        is_folder = file_elem.find('folder').text == 'true' if file_elem.find('folder') is not None else False
+                        
+                        if not link:
+                            continue
+                            
+                        if is_folder:
+                             # Recurse
+                             if '/bulkdata/' in link and collection in link:
+                                sub_files = self._crawl_collection_recursive(
+                                    link, 
+                                    collection, 
+                                    max_depth, 
+                                    current_depth + 1
+                                )
+                                file_urls.extend(sub_files)
+                        else:
+                            # It's a file
+                            if link.lower().endswith(('.xml', '.xsl', '.xsd')):
+                                file_urls.append(link)
+                    
+                    return file_urls # Successfully parsed as XML
+            except Exception:
+                # Not XML or parse error, fall back to HTML
+                pass
+                
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # GovInfo bulk data directory listings typically have links in a table or list
+            # We look for links that are either directories (ending in /) or files
+            for link in soup.find_all('a'):
+                href = link.get('href')
+                if not href or href == '../' or href == './' or href.startswith('?'):
+                    continue
+                    
+                full_url = urljoin(start_url, href)
+                
+                # Check if it's a file we want
+                if href.lower().endswith(('.xml', '.xsl', '.xsd')):
+                    file_urls.append(full_url)
+                    
+                # Check if it's a directory to traverse
+                elif href.endswith('/'):
+                    # Ensure we stay within the bulkdata realm and don't go up
+                    if '/bulkdata/' in full_url and collection in full_url:
+                        # Recursive call
+                        sub_files = self._crawl_collection_recursive(
+                            full_url, 
+                            collection, 
+                            max_depth, 
+                            current_depth + 1
+                        )
+                        file_urls.extend(sub_files)
+                        
         except Exception as e:
-            self.logger.error(f"Error fetching collection {collection}: {str(e)}")
-
+            self.logger.error(f"Error crawling {start_url}: {str(e)}")
+            
         return file_urls
 
     def _get_all_collections(self) -> List[str]:
@@ -401,34 +445,36 @@ class GovInfoBulkDownloader:
             'FR', 'HOUSE', 'PLAW', 'PPRO', 'SENATE', 'STATUTE'
         ]
 
-        # Try to fetch from API
+        # Try to fetch from main bulkdata page
         try:
             response = self.session.get(
                 self.base_url,
-                headers={'Accept': 'application/json'}
+                headers={'Accept': 'text/html'}
             )
 
             if response.status_code == 200:
-                # Parse HTML to find collection links
-                from bs4 import BeautifulSoup
                 soup = BeautifulSoup(response.text, 'html.parser')
-
                 collections = []
+                
+                # Look for links that look like collection names (uppercase directories)
                 for link in soup.find_all('a'):
                     href = link.get('href', '').strip('/')
-                    if href and href.isupper() and len(href) > 2:
-                        collections.append(href)
+                    # Collection names are usually uppercase and top-level in bulkdata
+                    if href and href.isupper() and len(href) > 1 and '/' not in href:
+                         collections.append(href)
 
                 if collections:
-                    return collections
+                    # Filter out non-collections if necessary, but returning what we find is usually good
+                    # Deduplicate and sort
+                    return sorted(list(set(collections)))
 
         except Exception as e:
-            self.logger.warning(f"Could not fetch collections from API: {str(e)}")
+            self.logger.warning(f"Could not fetch collections structure: {str(e)}")
 
-        return common_collections
+        return sorted(common_collections)
 
     def download_collection(self, collection: str, base_dir: Path = None,
-                          max_workers: int = 15, include_xsl: bool = True) -> Dict[str, any]:
+                          max_workers: int = 15, include_xsl: bool = True, congress: str = None) -> Dict[str, any]:
         """
         Download all files for a specific collection
 
@@ -437,6 +483,7 @@ class GovInfoBulkDownloader:
             base_dir: Base directory for downloads (default: data/govinfo)
             max_workers: Maximum concurrent workers
             include_xsl: Include XSL schema files
+            congress: Optional congress number to filter by (e.g. "115")
 
         Returns:
             Dictionary with download statistics
@@ -460,13 +507,41 @@ class GovInfoBulkDownloader:
         self._load_existing_downloads()
 
         # Get all file URLs for this collection
-        self.logger.info(f"Fetching file list for {collection}...")
-        file_urls = self._get_collection_urls(collection)
+        self.logger.info(f"Crawling collection {collection} for files...")
+        
+        # Determine start URL
+        collection_url = urljoin(self.base_url, collection + '/')
+        if congress:
+            # Append congress number to base URL if provided
+            # This assumes the collection is organized by congress (e.g. BILLS/115)
+            # If it's not (e.g. FR), check if this path exists first?
+            # For now, we attempt to append it. Crawler will handle 404s/warnings if invalid.
+            collection_url = urljoin(collection_url, f"{congress}/")
+            self.logger.info(f"Targeting specific congress: {congress} at {collection_url}")
+        
+        # Use recursive crawler
+        file_urls = self._crawl_collection_recursive(collection_url, collection)
 
         if include_xsl:
-            # Add XSL schema files
-            xsl_urls = self._get_xsl_files(collection)
-            file_urls.extend(xsl_urls)
+            # Try to find XSLs. They might be in a 'resources' folder or separate 'xsl' folders?
+            # Based on user research, some might be in the collection or in global folders.
+            # We can also check specific XSL paths.
+            self.logger.info("Scanning for additional XSL schemas...")
+            # Some schemas are in /bulkdata/xsl or /bulkdata/<COLLECTION>/resources
+            xsl_roots = [
+                 urljoin(self.base_url, "xsl/"),
+                 urljoin(self.base_url, f"{collection}/resources/")
+            ]
+            for root in xsl_roots:
+                xsl_files = self._crawl_collection_recursive(root, collection) # collection filter might block 'xsl' dir if distinct
+                # If checking common xsl/ without filter
+                if "xsl/" in root:
+                     xsl_files = self._crawl_collection_recursive(root, "xsl")
+                
+                file_urls.extend(xsl_files)
+
+        # Remove duplicates
+        file_urls = sorted(list(set(file_urls)))
 
         self.total_files = len(file_urls)
         self.logger.info(f"Found {self.total_files} files to download")
@@ -504,53 +579,11 @@ class GovInfoBulkDownloader:
 
         return self._get_stats()
 
-    def _get_xsl_files(self, collection: str) -> List[str]:
-        """Get XSL schema files for a collection"""
-        xsl_urls = []
 
-        # Common XSL locations
-        xsl_paths = [
-            f"{collection}/xsl",
-            f"xsl/{collection}",
-            "xsl/common"
-        ]
-
-        for xsl_path in xsl_paths:
-            try:
-                # Try XML endpoint
-                xml_url = f"https://www.govinfo.gov/bulkdata/xml/{xsl_path}"
-                response = self.session.get(xml_url, headers={'Accept': 'application/xml'})
-
-                if response.status_code == 200:
-                    from xml.etree import ElementTree
-                    root = ElementTree.fromstring(response.content)
-
-                    for file_elem in root.findall('.//file'):
-                        file_path = file_elem.text
-                        if file_path and file_path.endswith('.xsl'):
-                            full_url = f"https://www.govinfo.gov/bulkdata/{xsl_path}/{file_path}"
-                            xsl_urls.append(full_url)
-
-                else:
-                    # Try JSON endpoint
-                    json_url = f"https://www.govinfo.gov/bulkdata/json/{xsl_path}"
-                    response = self.session.get(json_url, headers={'Accept': 'application/json'})
-
-                    if response.status_code == 200:
-                        data = response.json()
-                        if isinstance(data, list):
-                            for item in data:
-                                if isinstance(item, dict) and 'path' in item and item['path'].endswith('.xsl'):
-                                    full_url = f"https://www.govinfo.gov/bulkdata/{xsl_path}/{item['path']}"
-                                    xsl_urls.append(full_url)
-
-            except Exception as e:
-                self.logger.debug(f"Could not fetch XSL files from {xsl_path}: {str(e)}")
-
-        return xsl_urls
 
     def download_all_collections(self, base_dir: Path = None,
-                               max_workers: int = 15, include_xsl: bool = True) -> Dict[str, any]:
+                               max_workers: int = 15, include_xsl: bool = True,
+                               congress: str = None) -> Dict[str, any]:
         """
         Download all available collections
 
@@ -558,14 +591,14 @@ class GovInfoBulkDownloader:
             base_dir: Base directory for downloads
             max_workers: Maximum concurrent workers per collection
             include_xsl: Include XSL schema files
-
-        Returns:
-            Dictionary with overall statistics
+            congress: Optional congress number filter
         """
         if base_dir is None:
             base_dir = Path(settings.data_directory) / "govinfo"
 
         self.logger.info("Starting download for all collections")
+        if congress:
+            self.logger.info(f"Filtering for Congress: {congress}")
 
         # Get all collections
         collections = self._get_all_collections()
@@ -587,11 +620,12 @@ class GovInfoBulkDownloader:
             self.logger.info('='*60)
 
             collection_dir = base_dir / collection
-            stats = self.download_collection(
+            stats = downloader.download_collection(
                 collection,
                 collection_dir,
                 max_workers=max_workers,
-                include_xsl=include_xsl
+                include_xsl=include_xsl,
+                congress=congress
             )
 
             # Update overall statistics
@@ -666,6 +700,7 @@ def main():
     parser.add_argument('--collection', help="Specific collection to download (e.g., BILLS, FR)")
     parser.add_argument('--all', action='store_true', help="Download all collections")
     parser.add_argument('--workers', type=int, default=15, help="Number of concurrent workers")
+    parser.add_argument('--congress', help="Specific congress number to download (e.g., 115, 116)")
     parser.add_argument('--output', help="Output directory")
     parser.add_argument('--no-xsl', action='store_false', dest='include_xsl', help="Exclude XSL schema files")
     parser.add_argument('--resume', action='store_true', help="Resume previous download")
@@ -685,7 +720,8 @@ def main():
         stats = downloader.download_all_collections(
             base_dir=output_dir,
             max_workers=args.workers,
-            include_xsl=args.include_xsl
+            include_xsl=args.include_xsl,
+            congress=args.congress
         )
         downloader.print_summary(stats)
 
@@ -696,7 +732,8 @@ def main():
             args.collection,
             base_dir=output_dir,
             max_workers=args.workers,
-            include_xsl=args.include_xsl
+            include_xsl=args.include_xsl,
+            congress=args.congress
         )
         downloader.print_summary(stats)
 

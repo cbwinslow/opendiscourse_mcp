@@ -120,6 +120,87 @@ class GovInfoMCPServer {
             },
             required: ['downloadUrl']
           }
+        },
+        {
+          name: 'govinfo_list_118th_bills',
+          description: 'List processed 118th Congress bills from local database',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              billType: {
+                type: 'string',
+                description: 'Filter by bill type (hr, s, hconres, etc.)',
+                enum: ['hr', 's', 'hconres', 'sconres', 'hjres', 'sjres']
+              },
+              session: {
+                type: 'number',
+                description: 'Filter by session (1 or 2)',
+                minimum: 1,
+                maximum: 2
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum number of results to return',
+                default: 20,
+                minimum: 1,
+                maximum: 100
+              },
+              offset: {
+                type: 'number',
+                description: 'Number of results to skip (for pagination)',
+                default: 0,
+                minimum: 0
+              }
+            }
+          }
+        },
+        {
+          name: 'govinfo_get_118th_bill',
+          description: 'Get detailed information about a specific 118th Congress bill',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              billId: {
+                type: 'string',
+                description: 'Bill ID (e.g., hr366, s2403)',
+                pattern: '^[a-z]+\\d+$'
+              }
+            },
+            required: ['billId']
+          }
+        },
+        {
+          name: 'govinfo_search_118th_bills',
+          description: 'Search 118th Congress bills by text content',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'Search query for bill titles and content',
+                minLength: 2
+              },
+              billType: {
+                type: 'string',
+                description: 'Filter by bill type (hr, s, hconres, etc.)',
+                enum: ['hr', 's', 'hconres', 'sconres', 'hjres', 'sjres']
+              },
+              session: {
+                type: 'number',
+                description: 'Filter by session (1 or 2)',
+                minimum: 1,
+                maximum: 2
+              },
+              limit: {
+                type: 'number',
+                description: 'Maximum number of results to return',
+                default: 10,
+                minimum: 1,
+                maximum: 50
+              }
+            },
+            required: ['query']
+          }
         }
       ]
     }));
@@ -138,10 +219,16 @@ class GovInfoMCPServer {
             return await this.listGranules(args);
           case 'govinfo_get_granule':
             return await this.getGranule(args);
-          case 'govinfo_download_content':
-            return await this.downloadContent(args);
-          default:
-            throw new Error(`Unknown tool: ${name}`);
+           case 'govinfo_download_content':
+             return await this.downloadContent(args);
+           case 'govinfo_list_118th_bills':
+             return await this.list118thBills(args);
+           case 'govinfo_get_118th_bill':
+             return await this.get118thBill(args);
+           case 'govinfo_search_118th_bills':
+             return await this.search118thBills(args);
+           default:
+             throw new Error(`Unknown tool: ${name}`);
         }
       } catch (error) {
         return {
@@ -231,7 +318,192 @@ class GovInfoMCPServer {
         type: 'text',
         text: JSON.stringify(contentInfo, null, 2)
       }]
-    };
+      };
+    }
+  }
+
+  async list118thBills(args) {
+    const { billType, session, limit = 20, offset = 0 } = args;
+    
+    try {
+      const sqlite3 = require('sqlite3').verbose();
+      const db = new sqlite3.Database('data/govinfo_downloads.db');
+      
+      let query = `
+        SELECT bill_id, bill_type, bill_number, title, official_title, 
+               sponsor_name, sponsor_party, sponsor_state, introduced_date,
+               current_chamber, bill_stage, congress, session
+        FROM bills 
+        WHERE congress = 118
+      `;
+      const params = [];
+      
+      if (billType) {
+        query += ' AND bill_type = ?';
+        params.push(billType);
+      }
+      
+      if (session) {
+        query += ' AND session = ?';
+        params.push(session);
+      }
+      
+      query += ' ORDER BY bill_number LIMIT ? OFFSET ?';
+      params.push(limit, offset);
+      
+      return new Promise((resolve, reject) => {
+        db.all(query, params, (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({
+              content: [{
+                type: 'text',
+                text: JSON.stringify(rows, null, 2)
+              }],
+              results: rows.length
+            });
+          }
+        });
+      });
+      
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Error listing 118th Congress bills: ${error.message}`
+        }],
+        isError: true
+      };
+    }
+  }
+
+  async get118thBill(args) {
+    const { billId } = args;
+    
+    try {
+      const sqlite3 = require('sqlite3').verbose();
+      const db = new sqlite3.Database('data/govinfo_downloads.db');
+      
+      // Get bill details
+      const billQuery = `
+        SELECT * FROM bills WHERE bill_id = ? AND congress = 118
+      `;
+      
+      // Get bill sections
+      const sectionsQuery = `
+        SELECT section_id, section_type, section_number, header, content, level, order_index
+        FROM bill_sections 
+        WHERE bill_id = ? 
+        ORDER BY order_index
+      `;
+      
+      return new Promise((resolve, reject) => {
+        db.get(billQuery, [billId], (err, bill) => {
+          if (err) {
+            reject(err);
+            return;
+          }
+          
+          if (!bill) {
+            resolve({
+              content: [{
+                type: 'text',
+                text: `Bill ${billId} not found in 118th Congress database`
+              }],
+              isError: true
+            });
+            return;
+          }
+          
+          db.all(sectionsQuery, [billId], (err, sections) => {
+            if (err) {
+              reject(err);
+            } else {
+              resolve({
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify({
+                    bill: bill,
+                    sections: sections
+                  }, null, 2)
+                }],
+                bill: bill,
+                sections: sections
+              });
+            }
+          });
+        });
+      });
+      
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Error getting 118th Congress bill: ${error.message}`
+        }],
+        isError: true
+      };
+    }
+  }
+
+  async search118thBills(args) {
+    const { query: searchQuery, billType, session, limit = 10 } = args;
+    
+    try {
+      const sqlite3 = require('sqlite3').verbose();
+      const db = new sqlite3.Database('data/govinfo_downloads.db');
+      
+      let sql = `
+        SELECT bill_id, bill_type, bill_number, title, official_title,
+               sponsor_name, sponsor_party, sponsor_state, introduced_date,
+               current_chamber, bill_stage, congress, session
+        FROM bills 
+        WHERE congress = 118 AND (
+          title LIKE ? OR official_title LIKE ?
+        )
+      `;
+      const params = [`%${searchQuery}%`, `%${searchQuery}%`];
+      
+      if (billType) {
+        sql += ' AND bill_type = ?';
+        params.push(billType);
+      }
+      
+      if (session) {
+        sql += ' AND session = ?';
+        params.push(session);
+      }
+      
+      sql += ' ORDER BY bill_number LIMIT ?';
+      params.push(limit);
+      
+      return new Promise((resolve, reject) => {
+        db.all(sql, params, (err, rows) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve({
+              content: [{
+                type: 'text',
+                text: JSON.stringify(rows, null, 2)
+              }],
+              results: rows.length,
+              query: searchQuery
+            });
+          }
+        });
+      });
+      
+    } catch (error) {
+      return {
+        content: [{
+          type: 'text',
+          text: `Error searching 118th Congress bills: ${error.message}`
+        }],
+        isError: true
+      };
+    }
   }
 }
 

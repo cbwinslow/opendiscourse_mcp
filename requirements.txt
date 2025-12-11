@@ -7,9 +7,17 @@ python-dotenv==1.0.0
 requests==2.31.0
 xmltodict==0.13.0
 
+# GovInfo Ingestion System
+aiohttp==3.9.1
+aiofiles==23.2.1
+tqdm==4.66.1
+lxml==6.0.2
+xmlschema==3.3.1
+
 # Development dependencies
 pytest==7.4.3
 pytest-asyncio==0.21.1
+pytest-cov==4.1.0
 black==23.11.0
 flake8==6.1.0
 mypy==1.7.1
@@ -17,7 +25,6 @@ mypy==1.7.1
 # Optional dependencies for enhanced functionality
 redis==5.0.1
 celery==5.3.4
-aiofiles==23.2.1
 fastapi==0.104.1
 uvicorn==0.24.0
 
@@ -25,8 +32,10 @@ uvicorn==0.24.0
 build==0.10.0
 twine==4.0.2
 wheel==0.42.0
+setuptools==69.0.3
 
 # Bitwarden CLI integration
 click==8.1.7
 cryptography==41.0.7
 pydantic==2.5.0
+beautifulsoup4==4.14.3

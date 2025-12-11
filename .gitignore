@@ -1,5 +1,125 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Environment files
+.env
+.env.local
+.env*.local
+.venv/
+venv/
+ENV/
+env/
+.env/
+.venv/
+env.bak/
+venv.bak/
+
+# IDE and Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+
+# Database files
+*.sqlite
+*.db
+*.sqlite3
+
+# Logs and runtime data
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Build output
+output/
+build/
+dist/
+target/
+
+# Documentation build
+docs/_build/
 docs/bill-status/
 docs/congress-api/
 docs/govinfo-api/
 docs/govinfo-bulk-data/
 docs/govinfo-collections/
+
+# Data files that should not be tracked
+data/govinfo_downloads.db
+govinfo_data/
+
+# Cache files
+.mypy_cache/
+.crush/
+.qodo/
+
+# Test and coverage
+.coverage
+*.cover
+.tox/
+.nyc_output/
+.coverage.*
+.pytest_cache/
+
+# Debug files
+debug_output.html
+*.prof
+
+# Shell scripts and temporary files
+*.sh
+*.bash
+*.zsh
+*.fish
+*.tmp
+*.bak
+*.backup
+*~
+*.orig
+
+# Configuration files that may contain sensitive data
+config/*.py
+!config/__init__.py
+
+# Large files and datasets
+*.zip
+*.tar
+*.gz
+*.rar
+*.7z
+*.dmg
+*.iso
