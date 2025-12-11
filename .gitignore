@@ -87,6 +87,7 @@ govinfo_data/
 .mypy_cache/
 .crush/
 .qodo/
+.ruff_cache/
 
 # Test and coverage
 .coverage
@@ -115,6 +116,14 @@ debug_output.html
 config/*.py
 !config/__init__.py
 
+# GitHub project and issue templates
+github_issues_template.md
+github_project_v2_template.md
+setup_github_project.py
+
+# Issue JSON files
+issue_*.json
+
 # Large files and datasets
 *.zip
 *.tar
@@ -123,3 +132,12 @@ config/*.py
 *.7z
 *.dmg
 *.iso
+
+# Python version and tool configuration files
+.python-version
+.tool-versions
+.envrc
+uv.toml
+
+# Test data
+test_data/

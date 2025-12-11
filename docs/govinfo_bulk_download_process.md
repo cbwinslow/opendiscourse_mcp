@@ -92,36 +92,39 @@ To prevent duplicate downloads:
 
 ### Python Implementation
 
-The download process is implemented in `scripts/govinfo_bulk_downloader_standalone.py`:
+The download process is orchestrated by `scripts/ingest_govinfo.py` (CLI) built on `scripts/ingestion/ingestor.py`.
+
+Example (programmatic):
 
 ```python
-# Initialize downloader
-downloader = GovInfoBulkDownloaderStandalone()
+import asyncio
+from pathlib import Path
+from scripts.ingestion import ingest_congress_data
 
-# Download specific collection
-stats = downloader.download_collection(
-    collection="BILLS",
-    base_dir=Path("./data/govinfo"),
-    max_workers=15,
-    include_xsl=True
+# Download BILLS and BILLSTATUS for the 118th Congress to govinfo_data/
+result = asyncio.run(
+    ingest_congress_data(congress=118, doc_types=["BILLS", "BILLSTATUS"], output_dir=Path("govinfo_data"))
 )
-
-# Print summary
-downloader.print_summary(stats)
+print(result)
 ```
 
 ### Command Line Usage
 
 ```bash
-# Download specific collection
-python3 scripts/govinfo_bulk_downloader_standalone.py --collection BILLS --workers 10 --output ./data/govinfo
+# Single congress, default document types (113–119 supported by default config)
+python3 scripts/ingest_govinfo.py --congress 118
 
-# Download all collections
-python3 scripts/govinfo_bulk_downloader_standalone.py --all --workers 15 --output ./data/govinfo
+# Multiple congresses and selected document types
+python3 scripts/ingest_govinfo.py --congress 117 118 --doc-types BILLS BILLSTATUS
 
-# Resume previous download
-python3 scripts/govinfo_bulk_downloader_standalone.py --collection BILLS --resume
+# All configured congresses
+python3 scripts/ingest_govinfo.py --all
+
+# Change workers and output directory
+python3 scripts/ingest_govinfo.py --congress 118 --workers 8 --output govinfo_data
 ```
+
+Note: The legacy standalone downloader scripts are deprecated in favor of the async ingestion CLI shown above.
 
 ## Configuration
 
@@ -216,17 +219,14 @@ The downloader uses the following configurable settings:
 
 ## Example Workflow
 
-### Single Collection Download
+### Example Workflow
 
 ```bash
-# Create output directory
-mkdir -p data/govinfo
+# Create output directory (optional)
+mkdir -p govinfo_data
 
-# Start download
-python3 scripts/govinfo_bulk_downloader_standalone.py \
-    --collection BILLS \
-    --workers 10 \
-    --output data/govinfo
+# Download BILLS and BILLSTATUS for the 118th Congress
+python3 scripts/ingest_govinfo.py --congress 118 --doc-types BILLS BILLSTATUS --workers 8 --output govinfo_data
 ```
 
 ### Expected Output
@@ -278,13 +278,19 @@ data/govinfo/
 └── ...
 ```
 
-### Tracking Files
+### Tracking Files and Artifacts
 
 ```
-data/govinfo/
-├── govinfo_downloads_tracking.json  # Downloaded URLs
-└── govinfo_download_progress.json   # Progress tracking
+govinfo_data/
+└── {congress}/
+    └── {doc_type}/
+        ├── manifest.json          # Run summary and file inventory
+        └── failures.json          # Failed URLs from the last run (if any)
 ```
+
+Notes:
+- Re-running the same command skips already-downloaded files and updates manifest.json accordingly.
+- failures.json is only present when failures occur.
 
 ## Best Practices
 
@@ -342,7 +348,7 @@ data/govinfo/
 export LOG_LEVEL=DEBUG
 
 # Run with debug output
-python3 scripts/govinfo_bulk_downloader_standalone.py --collection BILLS --workers 5
+python3 scripts/ingest_govinfo.py --congress 118 --doc-types BILLS --workers 5
 ```
 
 ## Conclusion

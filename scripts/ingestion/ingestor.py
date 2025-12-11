@@ -1,6 +1,8 @@
 """Main ingestion logic for govinfo.gov bulk data."""
 import asyncio
+import json
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import aiofiles
@@ -63,7 +65,7 @@ class GovInfoIngestor:
         self.semaphore = asyncio.Semaphore(workers)
 
         # Initialize rate limiter
-        self.rate_limiter = RateLimiter(rate_limit)
+        self.rate_limiter = RateLimiter(rate_limit, capacity=rate_limit * 2)
 
         # Initialize XML validator if needed
         self.validator = XMLValidator() if validate_xml else None
@@ -288,32 +290,74 @@ class GovInfoIngestor:
             logger.warning(f"No documents found for {doc_type} in Congress {congress}")
             return 0
 
-        # Download documents
-        tasks = []
+        # Ensure output directory exists and snapshot existing files
+        doc_dir = self.output_dir / str(congress) / doc_type
+        doc_dir.mkdir(parents=True, exist_ok=True)
+        before_files = {p.name for p in doc_dir.glob('*.xml')}
+
+        # Download documents with URL mapping for failure tracking
+        tasks_map: dict[asyncio.Task, str] = {}
         for doc_url in documents:
-            # Derive filename from URL
             filename = doc_url.rstrip("/").split("/")[-1]
-            output_path = self.output_dir / str(congress) / doc_type / filename
-            tasks.append(
+            output_path = doc_dir / filename
+            task = asyncio.create_task(
                 self.download_file(
                     session, doc_url, output_path, doc_type, retries=self.max_retries
                 )
             )
+            tasks_map[task] = doc_url
 
-        # Run downloads in parallel with progress bar
-        results = []
+        attempted = len(tasks_map)
+        success_count = 0
+        failure_count = 0
+        failed_urls: list[str] = []
+
         for f in tqdm(
-            asyncio.as_completed(tasks),
-            total=len(tasks),
+            asyncio.as_completed(list(tasks_map.keys())),
+            total=attempted,
             desc=f"{doc_type}-{congress}",
             unit="file",
         ):
-            results.append(await f)
+            ok = await f
+            if ok:
+                success_count += 1
+            else:
+                failure_count += 1
+                failed_urls.append(tasks_map[f])
 
-        success_count = sum(1 for r in results if r)
+        # Manifest and failures
+        after_files = {p.name for p in doc_dir.glob('*.xml')}
+        new_files = sorted(after_files - before_files)
+        total_files_in_dir = len(after_files)
+        total_bytes_in_dir = sum(p.stat().st_size for p in doc_dir.glob('*.xml'))
+
+        manifest = {
+            'congress': congress,
+            'doc_type': doc_type,
+            'attempted': attempted,
+            'succeeded': success_count,
+            'failed': failure_count,
+            'new_files_count': len(new_files),
+            'dir_total_files': total_files_in_dir,
+            'dir_total_bytes': total_bytes_in_dir,
+            'started_at': datetime.utcnow().isoformat() + 'Z',
+            'finished_at': datetime.utcnow().isoformat() + 'Z',
+            'new_files': new_files,
+        }
+        try:
+            (doc_dir / 'manifest.json').write_text(json.dumps(manifest, indent=2))
+        except Exception as e:
+            logger.warning(f"Unable to write manifest for {doc_type}-{congress}: {e}")
+
+        if failure_count > 0:
+            try:
+                (doc_dir / 'failures.json').write_text(json.dumps({'failed_urls': failed_urls}, indent=2))
+            except Exception as e:
+                logger.warning(f"Unable to write failures log for {doc_type}-{congress}: {e}")
+
         logger.info(
-            f"Processed {success_count}/{len(documents)} {doc_type} files "
-            f"for Congress {congress}"
+            f"Processed {success_count}/{attempted} {doc_type} files for Congress {congress} "
+            f"(new: {len(new_files)}, dir_total: {total_files_in_dir}, failures: {failure_count})"
         )
         return success_count
 
@@ -328,9 +372,59 @@ class GovInfoIngestor:
             doc_types = DOCUMENT_TYPES
 
         results = {}
+        congress_start_time = time.monotonic()
+        total_attempted = 0
+        total_succeeded = 0
+        total_failed = 0
+        total_skipped = 0
+
+        logger.info(f"Starting Congress {congress} processing for {len(doc_types)} document types")
+
         for doc_type in doc_types:
+            doc_start_time = time.monotonic()
             count = await self.process_document_type(session, congress, doc_type)
-            results[doc_type] = count
+            doc_elapsed = time.monotonic() - doc_start_time
+
+            # Get detailed stats for this document type
+            doc_dir = self.output_dir / str(congress) / doc_type
+            if doc_dir.exists():
+                total_files = len(list(doc_dir.glob('*.xml')))
+                manifest_path = doc_dir / 'manifest.json'
+                if manifest_path.exists():
+                    try:
+                        manifest = json.loads(manifest_path.read_text())
+                        attempted = manifest.get('attempted', 0)
+                        succeeded = manifest.get('succeeded', 0)
+                        failed = manifest.get('failed', 0)
+                        skipped = attempted - succeeded - failed
+                    except Exception:
+                        attempted = succeeded = failed = skipped = 0
+                else:
+                    attempted = succeeded = count
+                    failed = 0
+                    skipped = 0
+            else:
+                total_files = attempted = succeeded = failed = skipped = 0
+
+            results[doc_type] = succeeded
+            total_attempted += attempted
+            total_succeeded += succeeded
+            total_failed += failed
+            total_skipped += skipped
+
+            logger.info(
+                f"Congress {congress} - {doc_type}: {succeeded}/{attempted} files "
+                f"(failed: {failed}, skipped: {skipped}, total_in_dir: {total_files}, "
+                f"time: {doc_elapsed:.1f}s)"
+            )
+
+        congress_elapsed = time.monotonic() - congress_start_time
+
+        # Congress-level summary
+        logger.info(
+            f"Congress {congress} COMPLETE: {total_succeeded}/{total_attempted} total files "
+            f"(failed: {total_failed}, skipped: {total_skipped}, time: {congress_elapsed:.1f}s)"
+        )
 
         return results
 
@@ -344,11 +438,64 @@ class GovInfoIngestor:
             congresses = CONGRESS_SESSIONS
 
         results = {}
+        overall_start_time = time.monotonic()
+        total_attempted_all = 0
+        total_succeeded_all = 0
+        total_failed_all = 0
+        total_skipped_all = 0
+
+        logger.info(f"Starting ingestion for {len(congresses)} congresses: {congresses}")
+
         async with aiohttp.ClientSession() as session:
             for congress in congresses:
                 results[congress] = await self.process_congress(
                     session, congress, doc_types
                 )
+
+                # Accumulate totals from this congress
+                for doc_type, count in results[congress].items():
+                    doc_dir = self.output_dir / str(congress) / doc_type
+                    if doc_dir.exists():
+                        manifest_path = doc_dir / 'manifest.json'
+                        if manifest_path.exists():
+                            try:
+                                manifest = json.loads(manifest_path.read_text())
+                                total_attempted_all += manifest.get('attempted', 0)
+                                total_succeeded_all += manifest.get('succeeded', 0)
+                                total_failed_all += manifest.get('failed', 0)
+                            except Exception:
+                                total_attempted_all += count
+                                total_succeeded_all += count
+                        else:
+                            total_attempted_all += count
+                            total_succeeded_all += count
+
+        total_skipped_all = total_attempted_all - total_succeeded_all - total_failed_all
+        overall_elapsed = time.monotonic() - overall_start_time
+
+        # Final comprehensive summary
+        logger.info("=" * 80)
+        logger.info("INGESTION COMPLETE - FINAL SUMMARY")
+        logger.info("=" * 80)
+        logger.info(f"Congresses processed: {congresses}")
+        logger.info(f"Document types: {doc_types if doc_types else 'ALL'}")
+        logger.info(f"Total time: {overall_elapsed:.1f}s ({overall_elapsed/60:.1f}m)")
+        logger.info(f"Overall results: {total_succeeded_all}/{total_attempted_all} files")
+        logger.info(f"  - Succeeded: {total_succeeded_all}")
+        logger.info(f"  - Failed: {total_failed_all}")
+        logger.info(f"  - Skipped: {total_skipped_all}")
+        logger.info(f"  - Success rate: {(total_succeeded_all/total_attempted_all*100):.1f}%" if total_attempted_all > 0 else "  - Success rate: N/A")
+
+        # Per-congress breakdown
+        logger.info("Per-congress breakdown:")
+        for congress in congresses:
+            congress_total = sum(results[congress].values())
+            logger.info(f"  Congress {congress}: {congress_total} files downloaded")
+            for doc_type, count in results[congress].items():
+                if count > 0:
+                    logger.info(f"    - {doc_type}: {count}")
+
+        logger.info("=" * 80)
 
         return results
 

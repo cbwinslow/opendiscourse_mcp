@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import aiohttp
-from lxml import etree
+from lxml import etree as etree
 from lxml.etree import XMLSyntaxError
 import xmlschema
 
