@@ -18,18 +18,9 @@ on:
           - documentation
 
 jobs:
-  coderabbitai_review:
-    runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.review_type == 'all' || github.event.inputs.review_type == '' }}
-    steps:
-      - uses: coderabbitai/ai-pr-reviewer@latest
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-
   security_review:
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.review_type == 'all' || github.event.inputs.review_type == 'security' || github.event.inputs.review_type == '' }}
+    if: ${{ github.event.inputs.review_type == 'all' || github.event.inputs.review_type == 'security' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,7 +42,7 @@ jobs:
 
   performance_review:
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.review_type == 'all' || github.event.inputs.review_type == 'performance' || github.event.inputs.review_type == '' }}
+    if: ${{ github.event.inputs.review_type == 'all' || github.event.inputs.review_type == 'performance' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -73,7 +64,7 @@ jobs:
 
   quality_review:
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.review_type == 'all' || github.event.inputs.review_type == 'quality' || github.event.inputs.review_type == '' }}
+    if: ${{ github.event.inputs.review_type == 'all' || github.event.inputs.review_type == 'quality' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -95,7 +86,7 @@ jobs:
 
   documentation_review:
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.review_type == 'all' || github.event.inputs.review_type == 'documentation' || github.event.inputs.review_type == '' }}
+    if: ${{ github.event.inputs.review_type == 'all' || github.event.inputs.review_type == 'documentation' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -117,7 +108,7 @@ jobs:
 
   gemini_review:
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.review_type == 'all' || github.event.inputs.review_type == '' }}
+    if: ${{ github.event.inputs.review_type == 'all' || github.event.inputs.review_type == 'gemini' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -130,6 +121,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .
       - name: Run Google Gemini Code Review
-        run: python scripts/gemini_review_crew.py
+        run: python scripts/gemini_review_crew.py --review_type ${{ github.event.inputs.review_type }}
         env:
           GOOGLE_GEMINI_API_KEY: ${{ secrets.GOOGLE_GEMINI_API_KEY }}

@@ -1,0 +1,54 @@
+{
+  "data_integrity": {
+    "total_bills": 1511,
+    "bill_types": {
+      "hr": 1506,
+      "s": 5
+    },
+    "sessions": {
+      "1": 8,
+      "2": 1503
+    },
+    "total_sections": 114330,
+    "section_types": {
+      "paragraph": 53948,
+      "subsection": 24955,
+      "section": 14778,
+      "subparagraph": 13902,
+      "clause": 6747
+    },
+    "unique_sponsors": 384,
+    "content_completeness": {
+      "bills_with_content": 1511,
+      "total_bills": 1511,
+      "completeness_percentage": 100.0
+    },
+    "data_quality": {
+      "missing_essential_fields": 0,
+      "duplicate_bill_ids": 0
+    }
+  },
+  "performance": {
+    "bill_listing_100": {
+      "records_returned": 100,
+      "query_time_seconds": 0.001378774642944336,
+      "records_per_second": 72528.16877053432
+    },
+    "infrastructure_search": {
+      "records_found": 24,
+      "query_time_seconds": 0.0016508102416992188,
+      "records_per_second": 14538.315424610051
+    },
+    "sections_retrieval_200": {
+      "records_returned": 200,
+      "query_time_seconds": 0.03582620620727539,
+      "records_per_second": 5582.505689909893
+    }
+  },
+  "summary": {
+    "data_completeness": "EXCELLENT",
+    "performance": "EXCELLENT",
+    "overall_readiness": "PRODUCTION READY"
+  },
+  "recommendations": []
+}
