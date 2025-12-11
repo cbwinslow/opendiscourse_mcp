@@ -30,20 +30,92 @@ This project provides MCP servers that enable AI assistants to access comprehens
 
 ## Installation
 
+### Prerequisites
+
+1. **Node.js and npm** (for MCP server)
+2. **Python 3.8+** (for setup scripts)
+3. **PostgreSQL** (for database storage)
+4. **Bitwarden CLI** (for API key management)
+
+### Quick Start
+
 ```bash
 # Clone the repository
 git clone https://github.com/cbwinslow/opendiscourse_mcp.git
 cd opendiscourse_mcp
 
-# Install dependencies
+# Install Node.js dependencies
 npm install
 
-# Copy environment template
-cp .env.example .env
+# Install Bitwarden CLI
+npm install -g @bitwarden/cli
 
-# Edit .env with your API keys
-nano .env
+# Set up database
+./scripts/setup_database.sh
+
+# Set up API keys with Bitwarden
+python3 scripts/setup_bitwarden.py
+
+# Start MCP server
+npm start
 ```
+
+### Detailed Setup
+
+#### 1. Database Setup
+
+```bash
+# Automated database setup
+./scripts/setup_database.sh
+
+# Manual setup (if script fails)
+# Start PostgreSQL
+brew services start postgresql  # macOS
+sudo systemctl start postgresql  # Linux
+
+# Create database and user
+sudo -u postgres createdb opendiscourse
+sudo -u postgres createuser -s opendiscourse
+sudo -u postgres psql -c "ALTER USER opendiscourse PASSWORD 'opendiscourse123';"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE opendiscourse TO opendiscourse;"
+```
+
+#### 2. Bitwarden Setup
+
+```bash
+# Install Bitwarden CLI
+npm install -g @bitwarden/cli
+
+# Test Bitwarden integration
+python3 scripts/test_bitwarden.py
+
+# Add API keys to Bitwarden:
+# - GovInfo API Key
+# - Congress.gov API Key
+```
+
+#### 3. API Key Configuration
+
+```bash
+# Set environment variables (optional)
+export BITWARDEN_EMAIL="your-email@example.com"
+export BITWARDEN_PASSWORD="your-master-password"
+
+# Run automated setup
+python3 scripts/setup_bitwarden.py
+```
+
+**Bitwarden Item Setup:**
+
+Create these items in your Bitwarden vault:
+
+- **GovInfo API Key**
+  - Name: `GovInfo API Key`
+  - Custom Field: `api_key` with your GovInfo API key
+
+- **Congress.gov API Key**
+  - Name: `Congress.gov API Key`
+  - Custom Field: `api_key` with your Congress.gov API key
 
 ## Configuration
 
@@ -68,12 +140,50 @@ nano .env
 ### As MCP Server
 
 ```bash
-# Start the MCP server
+# Start MCP server
 npm start
 
 # Or in development mode with auto-restart
 npm run dev
 ```
+
+### Integration with Claude Desktop
+
+Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "opendiscourse": {
+      "command": "node",
+      "args": ["/path/to/opendiscourse_mcp/src/index.js"],
+      "env": {
+        "GOVINFO_API_KEY": "your_govinfo_key",
+        "CONGRESS_API_KEY": "your_congress_key"
+      }
+    }
+  }
+}
+```
+
+### API Key Management
+
+The project includes automated API key management through Bitwarden:
+
+```bash
+# Test Bitwarden integration
+python3 scripts/test_bitwarden.py
+
+# Set up API keys from Bitwarden
+python3 scripts/setup_bitwarden.py
+```
+
+**Features:**
+- 🔍 Automatic API key discovery from Bitwarden vault
+- 🔓 Secure vault unlocking
+- 📝 Environment file updates
+- 🗄️ Database storage with encryption
+- 🔐 Security masking in console output
 
 ### Integration with Claude Desktop
 
