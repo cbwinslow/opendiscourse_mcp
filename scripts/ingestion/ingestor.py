@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -123,7 +124,7 @@ class GovInfoIngestor:
     ) -> bool:
         """Download a single file with retries and validation."""
         if output_path.exists():
-            logger.debug(f"File exists, skipping: {output_path}")
+            logger.info(f"File exists, skipping: {output_path}")
             return True
 
         async with self.semaphore:

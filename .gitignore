@@ -83,6 +83,11 @@ docs/govinfo-collections/
 data/govinfo_downloads.db
 govinfo_data/
 
+# Ingestion results and progress files
+ingestion_results.json
+ingestion_progress.log
+congress_data/
+
 # Cache files
 .mypy_cache/
 .crush/

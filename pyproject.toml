@@ -17,13 +17,11 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
     "Topic :: Scientific/Engineering :: Information Analysis",
 ]
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10,<3.11"
 
 dependencies = [
     "@modelcontextprotocol/sdk>=0.5.0",
@@ -34,6 +32,10 @@ dependencies = [
     "click>=8.1.0",
     "cryptography>=41.0.0",
     "pydantic>=2.5.0",
+    "crewai>=0.70.0",
+    "langfuse>=2.0.0",
+    "langroid>=0.1.0",
+    "google-generativeai>=0.8.0",
 ]
 
 [project.optional-dependencies]
@@ -53,7 +55,7 @@ where = ["src", "config", "scripts"]
 
 [tool.black]
 line-length = 88
-target-version = ['py310', 'py311', 'py312']
+target-version = ['py310']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -104,6 +106,15 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["src", "config", "scripts"]
+
+# Markdown lint configuration
+[tool.markdownlint]
+config = {
+    "default": true,
+    "MD013": false,  # line length (handled by black for code)
+    "MD033": false,  # allow HTML
+    "MD041": false,  # allow first line H1
+}
 
 [tool.mypy]
 python_version = "3.10"

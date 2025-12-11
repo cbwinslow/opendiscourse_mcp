@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xsd:schema targetNamespace="http://schemas.gpo.gov/xml/uslm"
+   xmlns:uslm="http://schemas.gpo.gov/xml/uslm" xmlns="http://schemas.gpo.gov/xml/uslm"
+   xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xhtml="http://www.w3.org/1999/xhtml"
+   elementFormDefault="qualified" attributeFormDefault="unqualified" version="2.0.5"
+   xmlns:vc="http://www.w3.org/2007/XMLSchema-versioning">
+   <!-- This is a draft version of USLM schema with proposed changes from 
+        GPO USLM project.  The base version number is updated to "2" because 
+        breaking changes are proposed. This schema uses XMLSchema version 1.0.-->
+
+   <xsd:import namespace="http://www.w3.org/XML/1998/namespace" schemaLocation="xml.xsd"/>
+   <xsd:import namespace="http://purl.org/dc/terms/" schemaLocation="dcterms.xsd"/>
+   <xsd:import schemaLocation="uslm-table-module.xsd" namespace="http://www.w3.org/1999/xhtml">
+      <xsd:annotation>
+         <xsd:documentation> Schema that includes redefinitions for USLM/XHTML tables.
+         </xsd:documentation>
+      </xsd:annotation>
+   </xsd:import>
+   <xsd:annotation>
+      <xsd:documentation>
+         United States Legislative Model (USLM) - General schema for modeling United States
+         legislative and regulatory documents.
+      </xsd:documentation>
+   </xsd:annotation>
+</xsd:schema>
