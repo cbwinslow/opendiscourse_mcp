@@ -23,8 +23,8 @@
 	"license": "MIT",
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.7",
-		"@cloudflare/vite-plugin": "1.15.3",
-		"@cloudflare/vitest-pool-workers": "^0.10.11",
+		"@cloudflare/vite-plugin": "1.25.2",
+		"@cloudflare/vitest-pool-workers": "^0.12.14",
 		"@cloudflare/workers-types": "^4.20251126.0",
 		"@tailwindcss/vite": "^4.1.17",
 		"@types/node": "^24.10.3",
@@ -37,7 +37,7 @@
 		"typescript": "^5.9.3",
 		"vite": "^7.2.4",
 		"vitest": "3.2.4",
-		"wrangler": "^4.54.0"
+		"wrangler": "^4.67.0"
 	},
 	"dependencies": {
 		"@ai-sdk/openai": "^2.0.73",
@@ -48,7 +48,7 @@
 		"@radix-ui/react-dropdown-menu": "^2.1.16",
 		"@radix-ui/react-slot": "^1.2.4",
 		"@radix-ui/react-switch": "^1.2.6",
-		"agents": "^0.2.24",
+		"agents": "^0.3.10",
 		"ai": "^5.0.102",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
